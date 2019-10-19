@@ -1,9 +1,11 @@
 ---
 title: "JSON Vignette"
-subtitle: "Accidental Drug Deaths 2012-2018" 
 author: "Shaleni Kovach"
 date: "10/9/2019"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
+subtitle: Accidental Drug Deaths 2012-2018
 ---
 
 ```{r setup, include=FALSE}
