@@ -59,8 +59,6 @@ These objects can further be stored and sent in arrays. If we had data on some s
 
 and so on and so forth.
 
-JSON is *blah blah*.
-
 
 # Reading in JSON files
 There are three main packages for reading in JSON data in R. These are:

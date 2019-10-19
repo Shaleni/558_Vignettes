@@ -1,0 +1,146 @@
+---
+title: "XML Vignette"
+author: "Shaleni Kovach"
+date: "10/13/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=F, error=F, message=F)
+```
+
+```{r, echo=F}
+# Load libraries
+library(jsonlite)
+library(XML)
+library(tidyverse)
+```
+
+
+# Data Type - XML
+This vignette covers XML data. JSON stands for Extensible Markup Language, and is commonly used to  transfer an display data, particulary in website settings - though JSON has been gaining popularity over it for transportation/storage purposes due to differences in computation speed between the two. 
+
+XML has two main components - markup and content. Markup tags are used to specify what content is/how it should be displayed, while content is the actual information to be portrayed. 
+
+
+# Reading in XML files
+The main package for reading XML data in R is the XML package. It has an overwhemling presence when searching for XML packages in R.
+ 
+# Dataset
+This example will use data from a XML Rabies Lab Submissions from New York [(website link here)](https://health.data.ny.gov/Health/Rabies-Laboratory-Submissions-Beginning-2017/56p2-pcd9).  
+
+This dataset contains counts of different animals which were tested for rabies, and if they came back positive or not for various counties in New York.
+
+The data contains 123 rows and 24 columns, where each row is a county.
+
+# EDA
+
+Reading in the data:
+
+```{r}
+dataXML <- xmlParse(file = "rabies.xml")
+rootNode <- xmlRoot(dataXML)
+dataXML <- xmlSApply(rootNode,function(x) xmlSApply(x, xmlValue))
+
+data <- fromJSON("https://health.data.ny.gov/resource/56p2-pcd9.json")
+
+
+data$year <- as.factor(data$year)
+data$countyname <- as.factor(data$countyname)
+data <- data %>% mutate_if(is.character, as.numeric)
+
+head(data)
+```
+
+The data could use some extra variables - a fraction of the rabies positive animals by species, for instance.
+
+```{r}
+generateFraction <- function(data=data, name) {
+  total <- data[[name]]
+  total <- as.numeric(total)
+  posname <- paste0(name,'pos')
+  positive <- data[[posname]]
+  positive <- as.numeric(positive)
+  fracname <- paste0(name,'fraction')
+  return(positive/total)
+}
+
+names <- c("cattle", "bat", "cat", "fox", "dog", "raccoon", "skunk", "domother", "wildother","rodents")
+fracnames <- character()
+for (name in names){
+  newcol <- paste0(name,"fraction")
+  fracnames <- c(fracnames,newcol)
+  data[[newcol]] <- numeric(length(data[[name]]))
+  data[[newcol]] <- generateFraction(data,name)
+}
+```
+
+Now that we have the data read in and some additional variables, we can take a look at some of the numbers.
+
+```{r}
+summary(data$totalpos)
+summary(data$sent)
+```
+
+Hmm. That doesn't look right. The maximum number of animals that tested positive for rabies shouldn't be greater than the maximum number of animals sent in... Let's look at that a little more closely.
+
+```{r}
+head(data %>% arrange(desc(totalpos)) %>% select(year,countyname,sent,totalpos))
+```
+
+Yep that definately does not look right. Let's remove the rows that have greater total positive than sent.
+
+```{r}
+data <- data %>% filter(sent>totalpos)
+data <- data %>% mutate(totalfrac = totalpos/sent)
+
+summary(data$totalpos)
+summary(data$sent)
+```
+
+That looks much more reasonable. Now let's take a look at some graphs.
+
+```{r}
+topFrac <- data %>% arrange(desc(totalfrac))
+ggplot(topFrac[1:5,], aes(countyname,totalfrac)) + geom_point()
+```
+
+It looks like Wyoming and Columbia have the highest overall fraction of rabies in their animals. 
+
+```{r, echo=F}
+wyoming <- data %>% filter(countyname=="Wyoming")
+columbia <- data %>% filter(countyname=="Columbia")
+highest <- rbind(wyoming,columbia) %>% select(countyname,cattlefraction,batfraction,catfraction,
+                                              foxfraction, dogfraction, raccoonfraction, 
+                                              skunkfraction, domotherfraction, 
+                                              wildotherfraction,rodentsfraction)
+highest<-gather(highest,animal,fraction,cattlefraction:rodentsfraction)
+```
+
+Let's look at Wyoming and Columbia a little more in-depth.
+
+```{r}
+ggplot(highest,aes(animal,fraction,color=countyname)) + geom_jitter() + theme(
+    axis.text.x=element_text(angle=90))
+```
+
+100% of Wyoming's domestic other animals and raccoons came back with rabies. Don't want to come across either of those running around there! Columbia's results were overall more moderate, with a little over 50% of those animals coming back positive with rabies. 
+
+```{r}
+bats <- data %>% arrange(desc(batfraction)) %>% filter(batfraction >= .1)
+ggplot(bats,aes(countyname,batfraction,color=year)) + geom_jitter()
+```
+
+```{r echo=F, include=F}
+# Unquoting was not working with filter, so had to do it manually
+ggplot(data %>% filter(cattlefraction > 0), aes(countyname,"cattlefraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(batfraction > 0), aes(countyname,"batfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(catfraction > 0), aes(countyname,"catfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(foxfraction > 0), aes(countyname,"foxfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(dogfraction > 0), aes(countyname,"dogfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(raccoonfraction > 0), aes(countyname,"raccoonfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(skunkfraction > 0), aes(countyname,"skunkfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(domotherfraction > 0), aes(countyname,"domotherfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(wildotherfraction > 0), aes(countyname,"wildotherfraction", color=year)) + geom_jitter()
+ggplot(data %>% filter(rodentsfraction > 0), aes(countyname,"rodentsfraction", color=year)) + geom_jitter()
+```
